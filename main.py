@@ -53,7 +53,7 @@ async def savetomysql(line):
                                   user='root', password='root', db='logsklad',
                                   loop=None)
     cur = await conn.cursor()
-    await cur.execute("INSERT INTO logtable (userid, localname, linenum, component, querytext, datetimesave ) VALUES(%s,%s,%s,%s,%s, %s)",line)
+    await cur.execute("INSERT INTO logtable (userid, localname, sessionid, linenum, component, querytext, datetimesave ) VALUES(%s,%s,%s,%s,%s,%s, %s)",line)
     await conn.commit()
     await cur.close()
     conn.close()
@@ -64,6 +64,7 @@ async def jobline(oj):
     # начальные значения параметров
     par_userid = 0
     par_localname = ""
+    par_sessionid = ""
     par_linenum = 0
     par_dataset = ""
     par_sqlquery = ""
@@ -73,6 +74,8 @@ async def jobline(oj):
         par_userid = oj['userid']
     if oj['localname']:
         par_localname = oj['localname']
+    if oj['sessionid']:
+        par_sessionid = oj['sessionid']
     if oj['linenum']:
         par_linenum = oj['linenum']
     if oj['datetimesave']:
@@ -115,7 +118,7 @@ async def jobline(oj):
         par_datetimesave = formatted_date
 
     #формируем список параметров
-    par_list = par_userid, par_localname, par_linenum, par_dataset, par_sqlquery, par_datetimesave
+    par_list = par_userid, par_localname, par_sessionid, par_linenum, par_dataset, par_sqlquery, par_datetimesave
 
     #обработка списка параметров, формирование нужного списка
 
@@ -154,7 +157,7 @@ async def fn_logsave(inpacket=''):
         semaphore = asyncio.Semaphore(max_tasks)
 
 
-        print(inpacket)
+        #print(inpacket)
         try:
             dictData = json.loads(inpacket, strict=False)
         except:
@@ -172,7 +175,7 @@ async def fn_logsave(inpacket=''):
                 #формирование списка функций
                 tasks.append(asyncio.create_task(jobline(oj)))
         results = await asyncio.gather(*tasks)
-        print(results)
+        #print(results)
         #'''
 
         return HTMLResponse(content='message')

@@ -1,8 +1,6 @@
 from fastapi import FastAPI
 from fastapi.responses import HTMLResponse
-import uvicorn
 import json
-import base64
 import asyncio
 import aiomysql
 from datetime import datetime
@@ -11,23 +9,18 @@ from datetime import datetime
 app = FastAPI()
 
 
-def base64decode(encodedstring):
-    ''' функция декодирования строки в формате base64 '''
-    base64_message = encodedstring
-    base64_bytes = base64_message.encode('ascii')
-    message_bytes = base64.b64decode(base64_bytes)
-    return message_bytes.decode('ascii')
-
-
 async def splitcontent(line):
-    '''функция разбивки текста на параметры'''
+    """функция разбивки текста на параметры"""
     index1s = 0
     index1e = 0
     index2s = 0
     index2e = 0
     par_dataset = ""
     par_sqlquery = ""
-    content = base64decode(line['content'])
+    content = line['content']
+
+    content = "\n".join(content)
+
     # разбивка на переменные
     index1s = content.find("[")
     index1e = content.find("]")
@@ -37,7 +30,9 @@ async def splitcontent(line):
     if index1e > 0 and index2s > 0 and index2e > 0:
         par_dataset = content[index1e + 1:index2s - 2].strip()
         par_sqlquery = content[index2e + 1:len(content) - 1]
-        #print(f'par_dataset: {par_dataset}  par_sqlquery: {par_sqlquery} ')
+        return par_dataset, par_sqlquery
+    else:
+        par_sqlquery = content
         return par_dataset, par_sqlquery
 
 
@@ -46,7 +41,7 @@ async def savetomysql(line):
                                   user='root', password='root', db='logsklad',
                                   loop=None)
     cur = await conn.cursor()
-    await cur.execute("INSERT INTO logtable (userid, localname, component, querytext, datetimesave ) VALUES(%s,%s,%s,%s, %s)",line)
+    await cur.execute("INSERT INTO logtable (userid, localname, sessionid, linenum, component, querytext, datetimesave ) VALUES(%s,%s,%s,%s,%s,%s, %s)",line)
     await conn.commit()
     await cur.close()
     conn.close()
@@ -57,14 +52,21 @@ async def jobline(oj):
     # начальные значения параметров
     par_userid = 0
     par_localname = ""
+    par_sessionid = ""
+    par_linenum = 0
     par_dataset = ""
     par_sqlquery = ""
     par_datetimesave = "00.00.0000"
+
     #получаем список параметров
     if oj['userid']:
         par_userid = oj['userid']
     if oj['localname']:
         par_localname = oj['localname']
+    if oj['sessionid']:
+        par_sessionid = oj['sessionid']
+    if oj['linenum']:
+        par_linenum = oj['linenum']
     if oj['datetimesave']:
         par_datetimesave = oj['datetimesave']
     if oj['content']:
@@ -79,7 +81,7 @@ async def jobline(oj):
     dtime2 = False
     try:
         date_obj = datetime.strptime(date_string, '%d.%m.%Y')
-        dt  =True
+        dt  = True
     except ValueError:
         dt = False
     try:
@@ -93,6 +95,7 @@ async def jobline(oj):
     except ValueError:
         dtime2 = False
 
+
     if (dt):
         formatted_date = date_obj.strftime('%Y-%m-%d')
     if ((dtime1) or (dtime2)):
@@ -103,7 +106,9 @@ async def jobline(oj):
     else:
         par_datetimesave = formatted_date
 
-    par_list = par_userid, par_localname, par_dataset, par_sqlquery, par_datetimesave
+    #формируем список параметров
+    par_list = par_userid, par_localname, par_sessionid, par_linenum, par_dataset, par_sqlquery, par_datetimesave
+
     #отправляем список параметров на запись
     await savetomysql(par_list)
     return par_list
@@ -128,14 +133,28 @@ async def fn_logsave(inpacket=''):
         message = "Нет данных для обработки!"
         return HTMLResponse(content=message)
     else:
-        #если данные переданы, обрабатываем их
+
+        # если данные переданы, обрабатываем их
         message = ""
-        dictData = json.loads(inpacket)
+        # задаем максимальное количество одновременно выполняемых задач
+        max_tasks = 10
+        # создаем семафор с максимальным значением max_tasks
+        semaphore = asyncio.Semaphore(max_tasks)
+
+        try:
+            dictData = json.loads(inpacket, strict=False)
+        except:
+            message = 'неверный формат данных'
+            print(message)
+            exit()
+
         tasks = []
+
+
         for oj in dictData:
-            #формирование списка функций
-            tasks.append(jobline(oj))
+            async with semaphore:
+                #формирование списка функций
+                tasks.append(asyncio.create_task(jobline(oj)))
         results = await asyncio.gather(*tasks)
-        print(results)
 
         return HTMLResponse(content='message')
