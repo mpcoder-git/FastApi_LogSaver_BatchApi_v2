@@ -40,7 +40,8 @@ async def splitcontent(line):
 
     if index1e > 0 and index2s > 0 and index2e > 0:
         par_dataset = content[index1e + 1:index2s - 2].strip()
-        par_sqlquery = content[index2e + 1:len(content) - 1]
+        #par_sqlquery = content[index2e + 1:len(content) - 1] обрезка 1 символа справа в некоторых запросах
+        par_sqlquery = content[index2e + 1:len(content)]
         #print(f'par_dataset: {par_dataset}  par_sqlquery: {par_sqlquery} ')
         return par_dataset, par_sqlquery
     else:

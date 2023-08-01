@@ -29,7 +29,7 @@ async def splitcontent(line):
 
     if index1e > 0 and index2s > 0 and index2e > 0:
         par_dataset = content[index1e + 1:index2s - 2].strip()
-        par_sqlquery = content[index2e + 1:len(content) - 1]
+        par_sqlquery = content[index2e + 1:len(content)]
         return par_dataset, par_sqlquery
     else:
         par_sqlquery = content
